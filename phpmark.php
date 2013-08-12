@@ -3,8 +3,6 @@
 error_reporting(-1);
 ini_set('display_errors', true);
 
-header('Content-Type: text/plain');
-
 class PHPMark
 {
     private $runs = 1000;
@@ -138,6 +136,8 @@ class PHPMark
     
     public function run()
     {
+        set_time_limit(0);
+
         if ($this->isSetup())
         {
             foreach ($this->tests as $name => $test)
@@ -156,8 +156,118 @@ class PHPMark
                 }
             }
             
-            return $this->results;
+            return $this->summary();
         }
+    }
+
+    public function summary()
+    {
+        $result = array();
+        foreach ($this->tests as $name => $test)
+        {
+            $result[$name] = array();
+
+            $initializer = $this->results[$name]['initializer'][0];
+
+            $initializerResult = array();
+
+            foreach ($initializer['end'] as $key => $value)
+            {
+                $initializerResult[$key] = $value - $initializer['start'][$key];
+            }
+
+            $result[$name]['initializer'] = $initializerResult;
+
+            foreach ($this->steps as $step)
+            {
+                $result[$name][$step] = array();
+
+                $fastest = array();
+                $fastestMagnitude = null;
+
+                $slowest = array();
+                $slowestMagnitude = null;
+
+                $average = array();
+                $averageMagnitude = null;
+
+                $total = array();
+                $totalMagnitude = 0;
+
+                foreach ($this->results[$name][$step] as $run => $stepResult)
+                {
+                    $magnitude = 0;
+
+                    foreach ($stepResult['end'] as $key => $value)
+                    {
+                        $magnitude += $value;
+
+                        if (!array_key_exists($key, $total))
+                        {
+                            $total[$key] = 0;
+                        }
+
+                        $total[$key] += $value - $stepResult['start'][$key];
+                    }
+
+                    $totalMagnitude += $magnitude;
+
+                    if ($fastestMagnitude === null)
+                    {
+                        $fastestMagnitude = $magnitude;
+                        $slowestMagnitude = $magnitude;
+                        $averageMagnitude = $magnitude;
+                    }
+
+                    if ($magnitude < $fastestMagnitude || empty($fastest))
+                    {
+                        $fastest = array(
+                            'time' => $stepResult['end']['time'] - $stepResult['start']['time'],
+                            'microtime' => $stepResult['end']['microtime'] - $stepResult['start']['microtime'],
+                            'memory' => $stepResult['end']['memory'] - $stepResult['start']['memory'],
+                            'run' => $run
+                        );
+
+                        $fastestMagnitude = $magnitude;
+                    }
+
+                    if ($magnitude > $slowestMagnitude || empty($slowest))
+                    {
+                        $slowest = array(
+                            'time' => $stepResult['end']['time'] - $stepResult['start']['time'],
+                            'microtime' => $stepResult['end']['microtime'] - $stepResult['start']['microtime'],
+                            'memory' => $stepResult['end']['memory'] - $stepResult['start']['memory'],
+                            'run' => $run
+                        );
+
+                        $slowestMagnitude = $magnitude;
+                    }
+                }
+
+                $averageMagnitude = $totalMagnitude / $run;
+
+                $average = array(
+                    'time' => $total['time'] / $run,
+                    'microtime' => $total['microtime'] / $run,
+                    'memory' => $total['memory'] / $run
+                );
+
+                $result[$name][$step] = array(
+                    'magnitude' => array(
+                        'average' => $averageMagnitude,
+                        'slowest' => $slowestMagnitude,
+                        'fastest' => $fastestMagnitude,
+                        'total' => $totalMagnitude
+                    ),
+                    'average' => $average,
+                    'slowest' => $slowest,
+                    'fastest' => $fastest,
+                    'total' => $total
+                );
+            }
+        }
+
+        return $result;
     }
 }
 
@@ -214,16 +324,63 @@ class Test
 
 $mark = new PHPMark('loop');
 
-$mark->setRuns(5);
+$mark->setRuns(1000);
 
 $while = $mark->add('while');
 $while->initialize(function()
 {
-    return array(1, 'two');
+    return array(8);
 });
 
-$while->loop(function($count, $counter)
+$while->loop(function($count)
 {
+    $i = 0;
+
+    while ($i < $count)
+    {
+        $i++;
+    }
+
+    return $i;
+});
+
+$for = $mark->add('for');
+$for->initialize(function()
+{
+    return array(8);
+});
+
+$for->loop(function($count)
+{
+    for ($i = 0; $i < $count; $i++);
+    return $i;
+});
+
+$goto = $mark->add('goto');
+$goto->initialize(function()
+{
+    return array(8);
+});
+
+$goto->loop(function($count)
+{
+    $i = 0;
+
+    goto add;
+
+    add:
+    $i++;
+    if ($i < $count)
+    {
+        goto add;
+    }
+    else
+    {
+        goto end;
+    }
+
+    end:
+    return $i;
 });
 
 var_dump( $mark->run() );
