@@ -200,17 +200,19 @@ class PHPMark
 
                     foreach ($stepResult['end'] as $key => $value)
                     {
-                        $magnitude += $value;
-
                         if (!array_key_exists($key, $total))
                         {
                             $total[$key] = 0;
                         }
 
-                        $total[$key] += $value - $stepResult['start'][$key];
+                        $calculatedResult = $value - $stepResult['start'][$key];
+
+                        $total[$key] += $calculatedResult;
+
+                        $magnitude += pow($calculatedResult, 2);
                     }
 
-                    $totalMagnitude += $magnitude;
+                    $totalMagnitude += sqrt($magnitude);
 
                     if ($fastestMagnitude === null)
                     {
